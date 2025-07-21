@@ -52,8 +52,8 @@ class CMADProcessor:
                         self.encoding = 'latin-1'
             
             # Utiliser defusedxml pour la sécurité
-            self.tree = defusedET.ElementTree(defusedET.fromstring(self.xml_content))
-            self.root = self.tree.getroot()
+            self.root = defusedET.fromstring(self.xml_content)
+            self.tree = None  # On n'utilise pas ElementTree avec defusedxml
             
         except ET.ParseError as e:
             # Essayer de réparer le XML si possible
@@ -80,8 +80,8 @@ class CMADProcessor:
                 cleaned_xml = re.sub(pattern, replacement, cleaned_xml)
             
             # Réessayer le parsing
-            self.tree = defusedET.ElementTree(defusedET.fromstring(cleaned_xml))
-            self.root = self.tree.getroot()
+            self.root = defusedET.fromstring(cleaned_xml)
+            self.tree = None
             self.errors.append("XML réparé avec succès (caractères non échappés corrigés)")
             
         except Exception as e:
@@ -420,23 +420,24 @@ class CMADProcessor:
             # Utiliser minidom pour formatter
             reparsed = minidom.parseString(rough_string)
             
-            # Récupérer le XML formaté
-            pretty_xml = reparsed.toprettyxml(indent="  ", encoding=self.encoding)
+            # Récupérer le XML formaté sans l'encoding (on va l'ajouter manuellement)
+            pretty_xml = reparsed.documentElement.toprettyxml(indent="  ")
             
             # Nettoyer les lignes vides en trop
-            lines = pretty_xml.decode(self.encoding).split('\n')
-            lines = [line for line in lines if line.strip()]
+            lines = pretty_xml.split('\n')
+            lines = [line.rstrip() for line in lines if line.strip()]
             
             # Reconstruire avec la déclaration XML
             result = '<?xml version="1.0" encoding="' + self.encoding + '"?>\n'
-            result += '\n'.join(lines[1:])  # Ignorer la première ligne (déclaration XML de minidom)
+            result += '\n'.join(lines)
             
             return result
             
         except Exception as e:
             logger.error(f"Erreur lors du formatage XML: {str(e)}")
             # Fallback: retourner le XML non formaté
-            return ET.tostring(element, encoding=self.encoding).decode(self.encoding)
+            declaration = '<?xml version="1.0" encoding="' + self.encoding + '"?>\n'
+            return declaration + ET.tostring(element, encoding='unicode')
     
     def process(self) -> Tuple[str, List[dict], List[str]]:
         """
